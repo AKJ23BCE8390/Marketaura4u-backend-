@@ -1,22 +1,32 @@
 const User = require('../../models/user'); 
 
 const completeOnboarding = async (req, res) => {
-  const { companyName, industry, brandTone, teamSize } = req.body;
+  // brandTone is a string (e.g., "Witty")
+  // brandVoice (in the schema) should be an object { tone: "Witty", ... }
+  const { companyName, industry, brandTone, teamSize, platforms } = req.body;
   const userId = req.user.id;
 
   try {
-    // Directly pass the object; Mongoose will handle the $set internally
     const updates = {
       companyName,
-      industry,
+      industry,  
       teamSize,
-      brandVoice: brandTone,      // brandTone should match schema { tone, description }
-      onboardingCompleted: true   // optional: if you have this field
+      platforms, // This is correct (e.g., ["instagram", "blog"])
+      
+      // --- 👇 THIS IS THE FIX 👇 ---
+      // Save brandVoice as an object, so "user.brandVoice.tone" will work
+      brandVoice: {
+        tone: brandTone,
+        description: "" // You can add this to your form later
+      },
+      // --- 👆 END OF FIX 👆 ---
+
+      onboardingCompleted: true
     };
 
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      updates,                    // no need for {$set: updates}
+      updates,
       { new: true, runValidators: true }
     ).select('-password');
 
@@ -26,9 +36,9 @@ const completeOnboarding = async (req, res) => {
 
     res.status(200).json({
       message: 'Onboarding completed successfully',
-      status:200,
+      status: 200,
       user: updatedUser,
-      error:null
+      error: null
     });
 
   } catch (error) {

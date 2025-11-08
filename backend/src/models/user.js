@@ -15,10 +15,11 @@ const userSchema = new mongoose.Schema({
     default: '' 
   },
 
+// --- AFTER (The easy fix) ---
   brandVoice: {
     tone: { 
       type: String, 
-      enum: ['Professional', 'Friendly', 'Casual'],
+      // enum: ['Professional', 'Friendly', 'Casual'], // <-- REMOVED THIS LINE
       default: 'Professional'
     },
     description: { 
@@ -28,7 +29,7 @@ const userSchema = new mongoose.Schema({
   },
 
  
-  selectedPlatforms: [{
+  platforms: [{
     type: String,
     enum: ['twitter', 'linkedin', 'instagram', 'facebook', 'email', 'blog']
   }],
@@ -52,4 +53,4 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = mongoose.models.User || mongoose.model('User', userSchema);

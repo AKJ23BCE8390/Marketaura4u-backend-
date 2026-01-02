@@ -1,26 +1,33 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const jobSchema = new mongoose.Schema({
-  userId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true 
-  },
-  status: { 
-    type: String, 
-    enum: ['processing', 'completed', 'failed'], 
-    default: 'processing' 
-  },
-  
-  platforms: [String], // ['twitter', 'linkedin', 'email']
-  originalContent: String, // User's input text
-  generatedContent: {      // AI-generated content will go here
-    type: Map,            // Flexible structure for different platforms
-    of: mongoose.Schema.Types.Mixed
-  },
-  error: String
-}, {
-  timestamps: true // Adds createdAt, updatedAt automatically
-});
+const jobSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
 
-module.exports = mongoose.model('Job', jobSchema);
+    status: {
+      type: String,
+      enum: ["processing", "completed", "failed"],
+      default: "processing",
+    },
+
+    platforms: [String], // ['twitter', 'linkedin', 'email']
+    originalContent: String,
+
+    generatedContent: {
+      type: Map,
+      of: mongoose.Schema.Types.Mixed,
+    },
+
+    error: String,
+  },
+  {
+    timestamps: true,
+  }
+);
+
+// ✅ SAFE EXPORT (prevents OverwriteModelError)
+module.exports = mongoose.models.Job || mongoose.model("Job", jobSchema);

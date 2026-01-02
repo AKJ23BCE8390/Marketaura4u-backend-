@@ -1,50 +1,46 @@
-const User = require('../../models/user'); 
+const User = require("../../models/user");
 
-const completeOnboarding = async (req, res) => {
-  // brandTone is a string (e.g., "Witty")
-  // brandVoice (in the schema) should be an object { tone: "Witty", ... }
-  const { companyName, industry, brandTone, teamSize, platforms } = req.body;
-  const userId = req.user.id;
-
+const onBoard = async (req, res) => {
   try {
-    const updates = {
-      companyName,
-      industry,  
-      teamSize,
-      platforms, // This is correct (e.g., ["instagram", "blog"])
-      
-      // --- 👇 THIS IS THE FIX 👇 ---
-      // Save brandVoice as an object, so "user.brandVoice.tone" will work
-      brandVoice: {
-        tone: brandTone,
-        description: "" // You can add this to your form later
-      },
-      // --- 👆 END OF FIX 👆 ---
+    const userId = req.user.id;
 
-      onboardingCompleted: true
-    };
+    const {
+      companyName,
+      platforms,
+      brandVoice,
+    } = req.body;
+
+    // 🔍 Validation
+    if (!companyName || !Array.isArray(platforms)) {
+      return res.status(400).json({
+        message: "companyName and platforms are required",
+      });
+    }
 
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      updates,
-      { new: true, runValidators: true }
-    ).select('-password');
-
-    if (!updatedUser) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+      {
+        companyName,
+        platforms,
+        brandVoice: {
+          tone: brandVoice?.tone || "Professional",
+          description: brandVoice?.description || "",
+        },
+        onboardingCompleted: true,
+      },
+      { new: true }
+    ).select("-password");
 
     res.status(200).json({
-      message: 'Onboarding completed successfully',
       status: 200,
-      user: updatedUser,
-      error: null
+      message: "Onboarding completed",
+      data: updatedUser,
+      error: null,
     });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server Error' });
+  } catch (err) {
+    console.error("❌ ONBOARD ERROR:", err.message);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-module.exports = completeOnboarding;
+module.exports = onBoard;

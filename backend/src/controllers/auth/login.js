@@ -44,6 +44,7 @@ async function login(req, res) {
     data: {
       id: user._id,
       email: user.email,
+      onboardingCompleted: user.onboardingCompleted,
     },
     error: null,
   });

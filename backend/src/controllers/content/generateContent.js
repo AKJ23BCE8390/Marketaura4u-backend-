@@ -1,6 +1,7 @@
 const User = require('../../models/User'); // Updated path: go up two levels
 const Job = require('../../models/Job');   // Updated path: go up two levels
 
+
 /**
  * 🛎️ PART 1: THE "WAITER" (Waits for the AI to finish)
  * Handles the incoming request, creates a job ticket, and waits for completion.

@@ -1,49 +1,71 @@
-const User = require('../../models/user'); 
+const User = require('../../models/user.js'); // Check if your file is 'User.js' or 'user.js'
 
 const completeOnboarding = async (req, res) => {
-  // brandTone is a string (e.g., "Witty")
-  // brandVoice (in the schema) should be an object { tone: "Witty", ... }
-  const { companyName, industry, brandTone, teamSize, platforms } = req.body;
+  // 1. GET DATA FROM FRONTEND
+  // Make sure your frontend form sends these exact names
+  const { 
+    companyName, 
+    industry, 
+    brandTone, 
+    uvp,            
+    targetAudience,  
+    platforms 
+  } = req.body;
+  
   const userId = req.user.id;
 
   try {
+    // 2. PREPARE THE UPDATE OBJECT
+    // We must nest the data inside "brandProfile" to match your Schema
     const updates = {
-      companyName,
-      industry,  
-      teamSize,
-      platforms, // This is correct (e.g., ["instagram", "blog"])
       
-      // --- 👇 THIS IS THE FIX 👇 ---
-      // Save brandVoice as an object, so "user.brandVoice.tone" will work
-      brandVoice: {
-        tone: brandTone,
-        description: "" // You can add this to your form later
-      },
-      // --- 👆 END OF FIX 👆 ---
+      // This stays at the Root Level
+      onboardingCompleted: true,
 
-      onboardingCompleted: true
+      // Everything else goes inside the nested object
+      brandProfile: {
+        companyName: companyName || '',
+        industry: industry || '',
+        
+        // The "Brain" of your AI
+        uvp: uvp || '', 
+        targetAudience: targetAudience || '', 
+        
+        brandVoice: {
+          tone: brandTone || 'Professional',
+          description: '' // You can add a text input for this later
+        },
+        
+        // Ensure this is an array like ["twitter", "linkedin"]
+        platforms: platforms || [] 
+      }
     };
 
+    // 3. UPDATE DATABASE
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      updates,
+      { $set: updates }, // Use $set to be safe with nested updates
       { new: true, runValidators: true }
     ).select('-password');
 
     if (!updatedUser) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
+    // 4. SUCCESS RESPONSE
     res.status(200).json({
+      success: true,
       message: 'Onboarding completed successfully',
-      status: 200,
-      user: updatedUser,
-      error: null
+      user: updatedUser
     });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server Error' });
+    console.error("Onboarding Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server Error during onboarding', 
+      error: error.message 
+    });
   }
 };
 

@@ -6,65 +6,71 @@ import {
   Linkedin,
   Mail,
   FileText,
-  Sparkles,
-  Image as ImageIcon,
   Loader2,
   Save,
 } from "lucide-react";
 
 /* =======================
-   Content Card Component
+   Content Card
 ======================= */
 const ContentCard = ({ title, icon: Icon, content, colorClass, imageUrl }) => {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = () => {
-    const textToCopy =
-      typeof content === "object"
-        ? `Subject: ${content.subject}\n\n${content.body}`
-        : content;
-
-    navigator.clipboard.writeText(textToCopy);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   if (!content) return null;
 
+  const extractText = () => {
+    // Twitter (array)
+    if (Array.isArray(content)) {
+      return content[0]?.text || "";
+    }
+
+    // Email (object)
+    if (typeof content === "object") {
+      return `Subject: ${content.subject}\n\n${content.body}`;
+    }
+
+    // Blog / LinkedIn (string)
+    return content;
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(extractText());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col h-full">
+    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
+      {/* Header */}
       <div
-        className={`px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center ${colorClass} bg-opacity-10`}
+        className={`px-4 py-3 border-b flex justify-between items-center ${colorClass} bg-opacity-10`}
       >
         <div className="flex items-center gap-2">
           <div className={`p-1.5 rounded-md ${colorClass} text-white`}>
             <Icon size={16} />
           </div>
-          <h3 className="font-semibold text-slate-700 dark:text-slate-200 text-sm uppercase">
+          <h3 className="font-semibold text-sm uppercase text-slate-700 dark:text-slate-200">
             {title}
           </h3>
         </div>
-        <button
-          onClick={handleCopy}
-          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-        >
-          {copied ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
+
+        <button onClick={handleCopy}>
+          {copied ? (
+            <Check size={16} className="text-green-500" />
+          ) : (
+            <Copy size={16} />
+          )}
         </button>
       </div>
 
-      <div className="p-5 flex-grow flex flex-col gap-4">
-        <div className="whitespace-pre-wrap text-slate-600 dark:text-slate-300 text-sm leading-relaxed font-medium">
-          {typeof content === "object" ? (
+      {/* Content */}
+      <div className="p-5 space-y-4 flex-grow">
+        <div className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
+          {Array.isArray(content) ? (
+            content[0]?.text
+          ) : typeof content === "object" ? (
             <>
-              <p className="text-xs font-bold text-slate-400 uppercase mb-1">
-                Subject
-              </p>
-              <p className="font-semibold text-slate-800 dark:text-white mb-4">
-                {content.subject}
-              </p>
-              <p className="text-xs font-bold text-slate-400 uppercase mb-1">
-                Body
-              </p>
+              <p className="font-semibold mb-2">{content.subject}</p>
               {content.body}
             </>
           ) : (
@@ -72,12 +78,17 @@ const ContentCard = ({ title, icon: Icon, content, colorClass, imageUrl }) => {
           )}
         </div>
 
+        {/* ✅ IMAGE FIX */}
         {imageUrl && (
-          <img
-            src={imageUrl}
-            alt="Generated"
-            className="mt-auto w-full h-48 object-cover rounded-lg border"
-          />
+         <img
+  src={imageUrl}
+  alt="Generated marketing visual"
+  className="w-full h-48 object-cover rounded-lg border"
+  referrerPolicy="no-referrer"
+  crossOrigin="anonymous"
+  loading="lazy"
+/>
+
         )}
       </div>
     </div>
@@ -98,7 +109,7 @@ function ContentPage() {
   /* -------- Generate Content -------- */
   const handleGenerate = async () => {
     if (!prompt.trim()) {
-      setError("Please enter a topic to generate content.");
+      setError("Please enter a topic.");
       return;
     }
 
@@ -108,7 +119,7 @@ function ContentPage() {
     setData(null);
 
     try {
-      const response = await fetch(
+      const res = await fetch(
         "http://localhost:5000/api/v1/content/generate",
         {
           method: "POST",
@@ -118,10 +129,10 @@ function ContentPage() {
         }
       );
 
-      const resJson = await response.json();
-      if (!response.ok) throw new Error(resJson.message);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message);
 
-      setData(resJson.job.generatedContent);
+      setData(json.job.generatedContent);
     } catch (err) {
       setError(err.message || "Failed to generate content");
     } finally {
@@ -138,22 +149,26 @@ function ContentPage() {
     setSuccess("");
 
     try {
-      const res = await fetch("http://localhost:5000/api/v1/campaign/save", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: prompt.slice(0, 60),
-          prompt,
-          content: {
-            twitter: data.twitter,
-            linkedin: data.linkedin,
-            blog: data.blog,
-            email: data.email,
-          },
-          imageUrl: data.imageUrl,
-        }),
-      });
+      const res = await fetch(
+        "http://localhost:5000/api/v1/campaign/save",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: prompt.slice(0, 60),
+            prompt,
+            content: {
+              twitter: data.twitter,
+              linkedin: data.linkedin,
+              blog: data.blog,
+              email: data.email,
+            },
+            // ✅ FIXED IMAGE SOURCE
+            imageUrl: data.twitter?.[0]?.image_url || null,
+          }),
+        }
+      );
 
       const json = await res.json();
       if (!res.ok) throw new Error(json.message);
@@ -175,7 +190,7 @@ function ContentPage() {
           <h1 className="text-4xl font-extrabold text-slate-900 dark:text-white">
             AI Content <span className="text-blue-600">Studio</span>
           </h1>
-          <p className="text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mt-2">
+          <p className="text-slate-500 mt-2">
             Generate a full campaign from one idea.
           </p>
         </div>
@@ -186,11 +201,11 @@ function ContentPage() {
             rows={4}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            className="w-full p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border dark:border-slate-700 text-slate-900 dark:text-white"
+            className="w-full p-4 rounded-xl border dark:border-slate-700"
             placeholder="e.g. Launch campaign for eco-friendly bottles"
           />
 
-          <div className="mt-6 flex justify-end gap-4">
+          <div className="mt-6 flex justify-end">
             <button
               onClick={handleGenerate}
               disabled={loading}
@@ -201,7 +216,7 @@ function ContentPage() {
           </div>
         </div>
 
-        {/* Save Button */}
+        {/* Save */}
         {data && (
           <div className="flex justify-center">
             <button
@@ -224,26 +239,25 @@ function ContentPage() {
           </div>
         )}
 
-        {/* Status */}
+        {/* Messages */}
         {error && <p className="text-center text-red-500">{error}</p>}
         {success && <p className="text-center text-green-500">{success}</p>}
 
         {/* Results */}
         {data && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             <ContentCard
               title="Twitter"
               icon={Twitter}
               content={data.twitter}
+              imageUrl={data.twitter?.[0]?.image_url}
               colorClass="bg-sky-500"
-              imageUrl={data.imageUrl}
             />
             <ContentCard
               title="LinkedIn"
               icon={Linkedin}
               content={data.linkedin}
               colorClass="bg-blue-700"
-              imageUrl={data.imageUrl}
             />
             <ContentCard
               title="Email"

@@ -1,28 +1,34 @@
 const jwt = require("jsonwebtoken");
-const userModel = require("../models/user.js");
 
-const verify = async (req, res, next) => {
-    try {
-        const token = req.cookies.token;
-        if (!token) {
-            return res.status(401).send("User is not verified");
-        }
+const verify = (req, res, next) => {
+  console.log("🔥 AUTH MIDDLEWARE HIT");
 
-        const decoded = jwt.verify(token, process.env.JWT_SECREAT_KEY);
-        const email = decoded.email;
+  try {
+    console.log("Cookies:", req.cookies);
 
-        const user = await userModel.findOne({ email });
-        
-        if (!user) {
-            return res.status(401).send("User is not verified");
-        }
-
-        req.user = user;
-        next();
-    } catch (err) {
-        console.error(err);
-        return res.status(401).send("User is not verified");
+    const token = req.cookies.token;
+    if (!token) {
+      console.log("❌ No token found");
+      return res.status(401).json({ message: "No token" });
     }
+
+    console.log("Token:", token);
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log("Decoded JWT:", decoded);
+
+    req.user = {
+      id: decoded.id,
+      email: decoded.email,
+    };
+
+    console.log("✅ req.user set:", req.user);
+
+    next();
+  } catch (err) {
+    console.error("❌ AUTH ERROR:", err.message);
+    return res.status(401).json({ message: "Auth failed" });
+  }
 };
 
 module.exports = verify;

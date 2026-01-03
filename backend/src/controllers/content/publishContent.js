@@ -1,244 +1,197 @@
-const Job = require('../../models/job');
-const { TwitterApi } = require('twitter-api-v2');
-const path = require('path'); 
-const axios = require('axios'); // <-- 1. ADD THIS
+const Campaign = require("../../models/Campaign");
+const { TwitterApi } = require("twitter-api-v2");
+const axios = require("axios");
 
 // ===============================================================
-// 🚀 TWITTER PUBLISHING (WITH IMAGE URL DOWNLOAD)
+// 🐦 TWITTER PUBLISH (STRICT FORMAT)
+// Expected twitter content shape:
+// twitter: [
+//   { text: "...", image_url: "https://..." }
+// ]
 // ===============================================================
 
 const publishToTwitter = async (twitterContent) => {
-  console.log('--- 🚀 PUBLISHING TO TWITTER ---');
-  
-  const post = twitterContent[0]; 
-  const tweetText = post.text;
-  
-  // --- 2. THIS IS THE FIX ---
-  // Look for 'image_url' from your database object
-  const imageUrl = post.image_url; 
-  
-  console.log('Received post object:', post); // Keep this log for debugging
+  console.log("🐦 Publishing to Twitter");
 
+  // ✅ STRICT VALIDATION
+  if (!Array.isArray(twitterContent) || !twitterContent[0]?.text) {
+    throw new Error("Invalid Twitter content format");
+  }
+
+  const tweetText = twitterContent[0].text;
+  const imageUrl = twitterContent[0].image_url || null;
+
+  // -------- AUTH CHECK --------
+  const {
+    TWITTER_API_KEY,
+    TWITTER_API_SECRET,
+    TWITTER_ACCESS_TOKEN,
+    TWITTER_ACCESS_SECRET,
+  } = process.env;
+
+  if (
+    !TWITTER_API_KEY ||
+    !TWITTER_API_SECRET ||
+    !TWITTER_ACCESS_TOKEN ||
+    !TWITTER_ACCESS_SECRET
+  ) {
+    throw new Error("Twitter API credentials missing");
+  }
+
+  const twitterClient = new TwitterApi({
+    appKey: TWITTER_API_KEY,
+    appSecret: TWITTER_API_SECRET,
+    accessToken: TWITTER_ACCESS_TOKEN,
+    accessSecret: TWITTER_ACCESS_SECRET,
+  });
+
+  const rwClient = twitterClient.readWrite;
+  let mediaId = null;
+
+  // -------- IMAGE UPLOAD --------
   if (imageUrl) {
-    console.log('🖼️ Image URL found:', imageUrl);
-  } else {
-    console.log('No image_url provided in post object.');
-  }
-  // --- END OF FIX ---
+    console.log("🖼️ Downloading image:", imageUrl);
 
-  if (!tweetText) {
-    throw new Error('No tweet text found.');
-  }
-
-  if (!process.env.TWITTER_API_KEY ||
-      !process.env.TWITTER_API_SECRET ||
-      !process.env.TWITTER_ACCESS_TOKEN ||
-      !process.env.TWITTER_ACCESS_SECRET) {
-        
-    console.error('❌ Missing Twitter OAuth 1.0a credentials in .env file.');
-    throw new Error('Twitter API credentials are not configured on the server. Check .env file.');
-  }
-
-  console.log('📝 Tweet:', tweetText);
-
-  try {
-    const twitterClient = new TwitterApi({
-      appKey: process.env.TWITTER_API_KEY,
-      appSecret: process.env.TWITTER_API_SECRET,
-      accessToken: process.env.TWITTER_ACCESS_TOKEN,
-      accessSecret: process.env.TWITTER_ACCESS_SECRET,
+    const response = await axios.get(imageUrl, {
+      responseType: "arraybuffer",
+      timeout: 15000,
     });
 
-    const rwClient = twitterClient.readWrite;
-    let mediaId = null;
+    const imageBuffer = Buffer.from(response.data);
+    const mimeType = response.headers["content-type"];
 
-    // --- 3. THIS IS THE NEW UPLOAD LOGIC ---
-    if (imageUrl) {
-      try {
-        console.log('...downloading image from URL...');
-        
-        // Download the image as a buffer
-        const response = await axios.get(imageUrl, { 
-          responseType: 'arraybuffer' 
-        });
-        const imageBuffer = Buffer.from(response.data, 'binary');
-        
-        // Get the MIME type (e.g., 'image/png') from the response
-        const mimeType = response.headers['content-type'];
-        
-        if (!mimeType) {
-          throw new Error('Could not determine image MIME type.');
-        }
-
-        console.log(`...download complete. MIME Type: ${mimeType}`);
-        console.log('...uploading media to Twitter...');
-
-        // Upload the buffer
-        mediaId = await twitterClient.v1.uploadMedia(imageBuffer, { 
-          mimeType: mimeType 
-        });
-        
-        console.log(`...media uploaded, ID: ${mediaId}`);
-
-      } catch (uploadError) {
-        console.error('❌ Twitter media download/upload failed:', uploadError.message);
-        throw new Error(`Failed to upload media: ${uploadError.message}`);
-      }
+    if (!mimeType) {
+      throw new Error("Unable to detect image MIME type");
     }
 
-    // --- STEP 2: POST TWEET (with or without media) ---
-    console.log('🐦 Posting tweet...');
-
-    const tweetPayload = { text: tweetText };
-    if (mediaId) {
-      tweetPayload.media = { media_ids: [mediaId] };
+    // Twitter max: 5MB
+    if (imageBuffer.length > 5 * 1024 * 1024) {
+      throw new Error("Image exceeds Twitter 5MB limit");
     }
 
-    const { data } = await rwClient.v2.tweet(tweetPayload);
-    
-    console.log('✅ Tweet posted successfully!');
-    console.log(`🔗 URL: https://x.com/i/status/${data.id}`);
-    
-    return { 
-      success: true, 
-      url: `https://x.com/i/status/${data.id}`,
-      tweetId: data.id,
-      real: true
-    };
+    mediaId = await twitterClient.v1.uploadMedia(imageBuffer, {
+      mimeType,
+    });
 
-  } catch (error) {
-    console.error('❌ Twitter API publishing failed.');
-    let simpleErrorMessage = 'Failed to post tweet.';
-
-    if (error.data && error.data.detail) {
-      console.error('API Error Details:', error.data.detail);
-      simpleErrorMessage = `Twitter API Error: ${error.data.detail}`;
-    } else {
-      console.error('Error:', error.message);
-      simpleErrorMessage = error.message;
-    }
-    
-    throw new Error(simpleErrorMessage);
+    console.log("✅ Twitter media uploaded:", mediaId);
   }
-};
 
-// ===============================================================
-// 📧 OTHER PLATFORMS (SIMULATED)
-// ===============================================================
+  // -------- POST TWEET --------
+  const tweetPayload = { text: tweetText };
+  if (mediaId) {
+    tweetPayload.media = { media_ids: [mediaId] };
+  }
 
-const publishToEmail = async (emailContent) => {
-  console.log('📧 Email ready');
-  return { 
-    success: true, 
-    message: 'Email content ready',
-    simulated: true
-  };
-};
+  const { data } = await rwClient.v2.tweet(tweetPayload);
 
-const publishToLinkedIn = async (linkedinContent) => {
-  console.log('💼 LinkedIn ready');
-  return { 
-    success: true, 
-    message: 'LinkedIn post ready',
-    simulated: true
-  };
-};
+  console.log("✅ Tweet posted:", data.id);
 
-const publishToBlog = async (blogContent) => {
-  console.log('📝 Blog ready');
-  return { 
-    success: true, 
-    message: 'Blog post ready',
-    simulated: true
-  };
-};
-
-const publishToInstagram = async (instagramContent) => {
-  console.log('📸 Instagram ready');
-  return { 
-    success: true, 
-    message: 'Instagram post ready',
-    simulated: true
+  return {
+    success: true,
+    tweetId: data.id,
+    url: `https://x.com/i/status/${data.id}`,
+    real: true,
   };
 };
 
 // ===============================================================
-// 🛎️ MAIN PUBLISHING CONTROLLER
+// 🛎️ MAIN CONTROLLER
 // ===============================================================
 
 const publishContent = async (req, res) => {
   try {
-    const { jobId, platforms } = req.body;
+    const { campaignId, platform } = req.body;
     const userId = req.user.id;
 
-    console.log(`📦 Publishing job ${jobId} to: ${platforms}`);
-
-    const job = await Job.findOne({ _id: jobId, userId: userId });
-    if (!job || job.status !== 'completed') {
-      return res.status(400).json({ success: false, message: 'Job not ready' });
+    if (!campaignId || !platform) {
+      return res.status(400).json({
+        success: false,
+        message: "campaignId and platform are required",
+      });
     }
 
-    const generatedContent = job.generatedContent instanceof Map 
-      ? Object.fromEntries(job.generatedContent) 
-      : job.generatedContent;
+    const normalizedPlatform = platform.toLowerCase();
 
-    const results = [];
-    
-    for (const platform of platforms) {
-      const content = generatedContent[platform];
-      
-      if (!content) {
-        results.push({ platform, success: false, message: `No ${platform} content` });
-        continue;
-      }
+    console.log(`📦 Publishing campaign ${campaignId} → ${normalizedPlatform}`);
 
-      try {
-        let result;
-        switch (platform) {
-          case 'twitter':
-            result = await publishToTwitter(content);
-            break;
-          case 'linkedin':
-            result = await publishToLinkedIn(content);
-            break;
-          case 'blog':
-            result = await publishToBlog(content);
-            break;
-          case 'instagram':
-            result = await publishToInstagram(content);
-            break;
-          case 'email':
-            result = await publishToEmail(content);
-            break;
-          default:
-            result = { success: false, message: 'Platform not supported' };
-        }
-        
-        results.push({ platform, ...result });
-        
-      } catch (error) {
-        results.push({ platform, success: false, message: error.message });
-      }
+    const campaign = await Campaign.findOne({
+      _id: campaignId,
+      userId,
+    });
+
+    if (!campaign) {
+      return res.status(404).json({
+        success: false,
+        message: "Campaign not found",
+      });
     }
 
-    const successful = results.filter(r => r.success).length;
-    
+    // ✅ ENSURE CAMPAIGN IS READY
+    if (campaign.status !== "completed") {
+      return res.status(400).json({
+        success: false,
+        message: "Campaign is not ready for publishing",
+      });
+    }
+
+    const content = campaign.content?.[normalizedPlatform];
+    if (!content) {
+      return res.status(400).json({
+        success: false,
+        message: `No ${normalizedPlatform} content found`,
+      });
+    }
+
+    let result;
+
+    switch (normalizedPlatform) {
+      case "twitter":
+        result = await publishToTwitter(content);
+        break;
+
+      case "linkedin":
+      case "instagram":
+      case "email":
+      case "blog":
+        result = { success: true, simulated: true };
+        break;
+
+      default:
+        return res.status(400).json({
+          success: false,
+          message: "Unsupported platform",
+        });
+    }
+
+    // -------- SAVE PUBLISH STATUS --------
+    campaign.platformsPublished = campaign.platformsPublished || [];
+
+    if (!campaign.platformsPublished.includes(normalizedPlatform)) {
+      campaign.platformsPublished.push(normalizedPlatform);
+    }
+
+    campaign.publishedAt = new Date();
+    campaign.published =
+      campaign.platformsPublished.length > 0;
+
+    await campaign.save();
+
     res.json({
       success: true,
-      message: `Published: ${successful} successful, ${results.length - successful} failed`,
-      results: results
+      message: `Content published to ${normalizedPlatform}`,
+      result,
     });
 
   } catch (error) {
-    console.error('Publishing error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error',
-      error: error.message 
+    console.error("❌ Publish error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Publishing failed",
     });
   }
 };
 
 module.exports = {
-  publishContent
+  publishContent,
 };

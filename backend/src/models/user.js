@@ -49,7 +49,10 @@ const userSchema = new mongoose.Schema({
     of: String, // The value of each key must be a string
     default: {} 
   },
-
+  isPremium: { 
+    type: Boolean, 
+    default: false 
+  },
   // Basic usage tracking
   monthlyCredits: { 
     type: Number, 
